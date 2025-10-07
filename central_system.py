@@ -1,7 +1,7 @@
 import asyncio
 import logging
 from datetime import datetime
-
+import ssl
 import websockets
 from ocpp.routing import on
 from ocpp.v16 import ChargePoint as cp
@@ -82,13 +82,18 @@ class CentralSystem(cp):
 
 async def main():
     try:
+        # Create an SSL context for WSS
+        ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        ssl_context.load_cert_chain(certfile="cert.pem", keyfile="key.pem")  # Update paths if needed
+
         async with websockets.serve(
             lambda ws, path: CentralSystem(path.split('/')[-1], ws).start(),
             "localhost",
             9000,
-            subprotocols=["ocpp1.6"]
+            subprotocols=["ocpp1.6"],
+            ssl=ssl_context  # Add SSL context for WSS
         ):
-            logging.info("OCPP 1.6 server running on ws://localhost:9000")
+            logging.info("OCPP 1.6 server running on wss://localhost:9000")
             await asyncio.Future()  # Run forever
     except Exception as e:
         logging.error(f"Server failed: {e}")
