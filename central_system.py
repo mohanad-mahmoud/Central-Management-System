@@ -21,7 +21,8 @@ from ocpp.v16.enums import (
     ReservationStatus,
     ChargingProfileStatus,
     TriggerMessageStatus,
-    MessageTrigger
+    MessageTrigger,
+    GetCompositeScheduleStatus, 
 )
 
 logging.basicConfig(level=logging.DEBUG)  # Set to DEBUG for detailed logging
@@ -29,6 +30,7 @@ logging.basicConfig(level=logging.DEBUG)  # Set to DEBUG for detailed logging
 class CentralSystem(cp):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.transaction_counter = 0  # Initialize transaction counter
         logging.debug("CentralSystem initialized with route_map: %s", self.route_map)
 
     @on(Action.authorize)
@@ -137,6 +139,28 @@ class CentralSystem(cp):
             return call_result.FirmwareStatusNotification()
         except Exception as e:
             logging.error(f"Error in on_firmware_status_notification: {e}")
+            raise
+
+    @on(Action.get_composite_schedule)
+    async def on_get_composite_schedule(self, connector_id, duration, charging_rate_unit=None, **kwargs):
+        try:
+            logging.info(f"Received GetCompositeSchedule: connector_id {connector_id}, duration {duration}, charging_rate_unit {charging_rate_unit}")
+            return call_result.GetCompositeSchedule(
+                status=GetCompositeScheduleStatus.accepted,
+                connector_id=connector_id,
+                schedule_start=datetime.utcnow().isoformat(),
+                charging_schedule={
+                    "chargingRateUnit": charging_rate_unit or "W",
+                    "chargingSchedulePeriod": [
+                        {
+                            "startPeriod": 0,
+                            "limit": 10000  # 10 kW
+                        }
+                    ]
+                }
+            )
+        except Exception as e:
+            logging.error(f"Error in on_get_composite_schedule: {e}")
             raise
 
     @on(Action.get_configuration)
@@ -262,9 +286,10 @@ class CentralSystem(cp):
     @on(Action.start_transaction)
     async def on_start_transaction(self, connector_id, id_tag, meter_start, timestamp, **kwargs):
         try:
-            logging.info(f"Received StartTransaction: connector_id {connector_id}, id_tag {id_tag}")
+            self.transaction_counter += 1  # Increment transaction counter
+            logging.info(f"Received StartTransaction: connector_id {connector_id}, id_tag {id_tag}, transaction_id {self.transaction_counter}")
             return call_result.StartTransaction(
-                transaction_id=1,
+                transaction_id=self.transaction_counter,
                 id_tag_info={'status': AuthorizationStatus.accepted}
             )
         except Exception as e:
